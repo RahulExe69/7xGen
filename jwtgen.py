@@ -87,14 +87,14 @@ def get_single_response():
             "uid": uid,
             "status": "invalid",
             "message": "Wrong UID or Password. Please check and try again.",
-            "credit": "@rahulexez"
+            "credit": "Auraxseller"
         }), 400
 
     game_data = my_pb2.GameData()
-    game_data.timestamp = "2024-12-05 18:15:32"
+    game_data.timestamp = "2025-05-22 10:10:10"
     game_data.game_name = "free fire"
-    game_data.game_version = 1
-    game_data.version_code = "1.111.2"
+    game_data.game_version = 2  # OB49 version
+    game_data.version_code = "1.109.2"  # Update with actual OB49 version code
     game_data.os_info = "Android OS 9 / API-28 (PI/rel.cjw.20220518.114133)"
     game_data.device_type = "Handheld"
     game_data.network_provider = "Verizon Wireless"
@@ -124,13 +124,13 @@ def get_single_response():
     game_data.field_67 = 32968
     game_data.field_70 = 4
     game_data.field_73 = 2
-    game_data.library_path = "/data/app/com.dts.freefireth-QPvBnTUhYWE-7DMZSOGdmA==/lib/arm"
+    game_data.library_path = "/data/app/com.dts.freefireth-NEWBASEPATH/base.apk"
     game_data.field_76 = 1
-    game_data.apk_info = "5b892aaabd688e571f688053118a162b|/data/app/com.dts.freefireth-QPvBnTUhYWE-7DMZSOGdmA==/base.apk"
+    game_data.apk_info = "updated_hash_value|/data/app/com.dts.freefireth-NEWBASEPATH/base.apk"
     game_data.field_78 = 6
     game_data.field_79 = 1
-    game_data.os_architecture = "64"
-    game_data.build_number = "2019118399"
+    game_data.os_architecture = "32"
+    game_data.build_number = "2019117877"
     game_data.field_85 = 1
     game_data.graphics_backend = "OpenGLES2"
     game_data.max_texture_units = 16383
@@ -159,7 +159,7 @@ def get_single_response():
             'Expect': "100-continue",
             'X-Unity-Version': "2018.4.11f1",
             'X-GA': "v1 1",
-            'ReleaseVersion': "OB49"
+            'ReleaseVersion': "OB50"
         }
 
         response = requests.post(url, data=bytes.fromhex(edata), headers=headers, verify=False)
