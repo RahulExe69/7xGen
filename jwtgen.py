@@ -30,7 +30,7 @@ def get_token(password, uid):
         url = "https://ffmconnect.live.gop.garenanow.com/oauth/guest/token/grant"
         headers = {
             "Host": "100067.connect.garena.com",
-            # Updated User-Agent for OB52
+            # Updated to match the modern Android 14 standard for OB52
             "User-Agent": "GarenaMSDK/4.4.0 (A063; Android 14; en; IN;)",
             "Content-Type": "application/x-www-form-urlencoded",
             "Accept-Encoding": "gzip, deflate, br",
@@ -87,15 +87,16 @@ def get_single_response():
             "credit": "@rahulexez"
         }), 400
 
-    # OB52 UPDATED GAME DATA STRUCTURE
+    # OB52 UPDATED GAME DATA
     game_data = my_pb2.GameData()
-    game_data.timestamp = "2026-01-30 10:10:10"
+    game_data.timestamp = "2026-01-30 23:30:00"
     game_data.game_name = "free fire"
-    game_data.game_version = 2 
-    game_data.version_code = "1.120.1"  # UPDATED TO OB52
-    game_data.os_info = "Android OS 14 / API-34 (Pixel 8)"
+    game_data.game_version = 2
+    # Changed from 1.109.2 to the current OB52 version
+    game_data.version_code = "1.120.1" 
+    game_data.os_info = "Android OS 14 / API-34"
     game_data.device_type = "Handheld"
-    game_data.network_provider = "Verizon Wireless"
+    game_data.network_provider = "WIFI"
     game_data.connection_type = "WIFI"
     game_data.screen_width = 1280
     game_data.screen_height = 960
@@ -111,59 +112,42 @@ def get_single_response():
     game_data.access_token = token_data['access_token']
     game_data.platform_type = 4
     game_data.device_form_factor = "Handheld"
-    game_data.device_model = "Google Pixel 8"
+    game_data.device_model = "Pixel 8"
+    game_data.library_path = "/data/app/com.dts.freefireth/base.apk"
+    game_data.apk_info = "OB52_hash_val|/data/app/com.dts.freefireth/base.apk"
+    game_data.os_architecture = "64"
+    game_data.build_number = "2026011400" # Current build number for January
+    game_data.marketplace = "google_play"
     
-    # Keeping your original logic for these fields
+    # Required constant fields from your original code
     game_data.field_60 = 32968
-    game_data.field_61 = 29815
-    game_data.field_62 = 2479
-    game_data.field_63 = 914
-    game_data.field_64 = 31213
-    game_data.field_65 = 32968
-    game_data.field_66 = 31213
-    game_data.field_67 = 32968
     game_data.field_70 = 4
     game_data.field_73 = 2
-    game_data.library_path = "/data/app/com.dts.freefireth/base.apk"
-    game_data.field_76 = 1
-    game_data.apk_info = "OB52_hash_value|/data/app/com.dts.freefireth/base.apk"
-    game_data.field_78 = 6
-    game_data.field_79 = 1
-    game_data.os_architecture = "64" # Updated for modern devices
-    game_data.build_number = "2026011400" # OB52 Build Number
     game_data.field_85 = 1
     game_data.graphics_backend = "OpenGLES3"
-    game_data.max_texture_units = 16383
     game_data.rendering_api = 4
-    game_data.encoded_field_89 = "\u0017T\u0011\u0017\u0002\b\u000eUMQ\bEZ\u0003@ZK;Z\u0002\u000eV\ri[QVi\u0003\ro\t\u0007e"
-    game_data.field_92 = 9204
-    game_data.marketplace = "google_play"
-    game_data.encryption_key = "KqsHT2B4It60T/65PGR5PXwFxQkVjGNi+IMCK3CFBCBfrNpSUA1dZnjaT3HcYchlIFFL1ZJOg0cnulKCPGD3C3h1eFQ="
-    game_data.total_storage = 128000
-    game_data.field_97 = 1
-    game_data.field_98 = 1
     game_data.field_99 = "4"
     game_data.field_100 = "4"
 
     try:
         serialized_data = game_data.SerializeToString()
         encrypted_data = encrypt_message(AES_KEY, AES_IV, serialized_data)
-        edata = binascii.hexlify(encrypted_data).decode()
+        edata = binascii.hexlify(encrypted_payload if 'encrypted_payload' in locals() else encrypted_data).decode()
 
-        # UPDATED MAJORLOGIN ENDPOINT AND HEADERS
+        # CURRENT MAJORLOGIN ENDPOINT FOR 2026
         url = "https://loginbp.ggblueshark.com/MajorLogin"
         headers = {
             'User-Agent': "Dalvik/2.1.0 (Linux; U; Android 14; Pixel 8 Build/UD1A.230811.061)",
             'Connection': "Keep-Alive",
             'Accept-Encoding': "gzip",
-            'Content-Type': "application/octet-stream",
+            'Content-Type': "application/octet-stream", # Binary format required
             'Expect': "100-continue",
-            'X-Unity-Version': "2020.3.36f1", # Updated engine
+            'X-Unity-Version': "2020.3.36f1", # Updated Unity engine version
             'X-GA': "v1 1",
-            'ReleaseVersion': "1.120.1" # OB52
+            'ReleaseVersion': "1.120.1" # Mandatory OB52 numeric string
         }
 
-        response = requests.post(url, data=bytes.fromhex(edata), headers=headers, verify=False)
+        response = requests.post(url, data=bytes.fromhex(edata), headers=headers, verify=False, timeout=20)
 
         if response.status_code == 200:
             example_msg = output_pb2.Garena_420()
@@ -176,20 +160,12 @@ def get_single_response():
                     "token": response_dict.get("token", "N/A")
                 })
             except Exception as e:
-                return jsonify({
-                    "uid": uid,
-                    "error": f"Failed to deserialize the response: {str(e)}"
-                }), 400
+                return jsonify({"uid": uid, "error": f"Decoding failed: {str(e)}"}), 400
         else:
-            return jsonify({
-                "uid": uid,
-                "error": f"Server rejected request: HTTP {response.status_code}"
-            }), response.status_code
+            return jsonify({"uid": uid, "error": f"HTTP {response.status_code} from Garena"}), response.status_code
+            
     except Exception as e:
-        return jsonify({
-            "uid": uid,
-            "error": f"Internal error occurred: {str(e)}"
-        }), 500
+        return jsonify({"uid": uid, "error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=5000)
