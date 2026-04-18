@@ -28,13 +28,11 @@ cache = Cache(app, config={'CACHE_TYPE': 'SimpleCache', 'CACHE_DEFAULT_TIMEOUT':
 def get_token(password, uid):
     try:
         url = "https://ffmconnect.live.gop.garenanow.com/oauth/guest/token/grant"
+        # Updated headers (from new code)
         headers = {
-            "Host": "100067.connect.garena.com",
-            # Updated User-Agent to match current MSDK standards
             "User-Agent": "GarenaMSDK/4.0.19P9(A063 ;Android 13;en;IN;)",
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Accept-Encoding": "gzip",
-            "Connection": "Keep-Alive"
+            "Connection": "Keep-Alive",
+            "Accept-Encoding": "gzip"
         }
         data = {
             "uid": uid,
@@ -47,7 +45,11 @@ def get_token(password, uid):
         res = requests.post(url, headers=headers, data=data, timeout=10)
         if res.status_code != 200:
             return None
-        return res.json()
+        token_json = res.json()
+        if "access_token" in token_json and "open_id" in token_json:
+            return token_json
+        else:
+            return None
     except Exception:
         return None
 
@@ -58,7 +60,7 @@ def encrypt_message(key, iv, plaintext):
 
 def parse_response(content):
     response_dict = {}
-    lines = str(content).split("\n")
+    lines = content.split("\n")
     for line in lines:
         if ":" in line:
             key, value = line.split(":", 1)
@@ -71,62 +73,75 @@ def get_single_response():
     uid = request.args.get('uid')
     password = request.args.get('password')
 
-    if not uid or not password:  
-        return jsonify({"error": "Both uid and password parameters are required"}), 400  
+    if not uid or not password:
+        return jsonify({"error": "Both uid and password parameters are required"}), 400
 
-    token_data = get_token(password, uid)  
-    if not token_data:  
-        return jsonify({  
-            "uid": uid,  
-            "status": "invalid",  
-            "message": "Wrong UID or Password.",  
-            "credit": "@rahulexez"  
-        }), 400  
+    token_data = get_token(password, uid)
+    if not token_data:
+        return jsonify({
+            "uid": uid,
+            "status": "invalid",
+            "message": "Wrong UID or Password. Please check and try again.",
+            "credit": "@rahulexez"
+        }), 400
 
-    # Keep your game_data structure as is
+    # Build minimal protobuf (only essential fields – matches new code's approach)
     game_data = my_pb2.GameData()
-    # ... [Keep all your existing game_data assignments here] ...
-    game_data.open_id = token_data['open_id']  
+    # Keep only the fields that the server actually needs
+    game_data.open_id = token_data['open_id']
     game_data.access_token = token_data['access_token']
-    
-    # ... [Keep the rest of your assignment logic] ...
+    game_data.platform_type = 4
+    # The rest are optional – comment them out to avoid validation errors
+    # game_data.timestamp = "2025-05-22 10:10:10"
+    # game_data.game_name = "free fire"
+    # ... (all other fields omitted)
 
-    try:  
-        serialized_data = game_data.SerializeToString()  
-        encrypted_data = encrypt_message(AES_KEY, AES_IV, serialized_data)  
-        edata = binascii.hexlify(encrypted_data).decode()  
+    try:
+        serialized_data = game_data.SerializeToString()
+        encrypted_data = encrypt_message(AES_KEY, AES_IV, serialized_data)
+        edata = binascii.hexlify(encrypted_data).decode()
 
-        # Updated URL and Headers
-        url = "https://loginbp.ggpolarbear.com/MajorLogin"  
-        headers = {  
-            'User-Agent': "Dalvik/2.1.0 (Linux; U; Android 13; A063 Build/TKQ1.221220.001)",  
-            'Connection': "Keep-Alive",  
-            'Accept-Encoding': "gzip",  
-            'Content-Type': "application/octet-stream",  
-            'Expect': "100-continue",  
-            'X-Unity-Version': "2018.4.11f1",  
-            'X-GA': "v1 1",  
-            'ReleaseVersion': "OB50"  # Ensure this matches the live version
-        }  
+        # ***** UPDATED URL AND HEADERS (from new working code) *****
+        url = "https://loginbp.ggpolarbear.com/MajorLogin"   # changed endpoint
+        headers = {
+            'User-Agent': "Dalvik/2.1.0 (Linux; U; Android 13; A063 Build/TKQ1.221220.001)",
+            'Connection': "Keep-Alive",
+            'Accept-Encoding': "gzip",
+            'Content-Type': "application/octet-stream",
+            'Expect': "100-continue",
+            'Authorization': "Bearer",                        # added
+            'X-Unity-Version': "2018.4.11f1",
+            'X-GA': "v1 1",
+            'ReleaseVersion': "OB52"                          # updated from OB50
+        }
 
-        response = requests.post(url, data=bytes.fromhex(edata), headers=headers, verify=False)  
+        response = requests.post(url, data=bytes.fromhex(edata), headers=headers, verify=False)
 
-        if response.status_code == 200:  
-            example_msg = output_pb2.Garena_420()  
-            try:  
-                example_msg.ParseFromString(response.content)  
-                response_dict = parse_response(example_msg)  
-                return jsonify({  
-                    "uid": uid,  
-                    "status": response_dict.get("status", "N/A"),  
-                    "token": response_dict.get("token", "N/A")  
-                })  
-            except Exception as e:  
-                return jsonify({"uid": uid, "error": f"Deserialization failed: {str(e)}"}), 400  
-        else:  
-            return jsonify({"uid": uid, "error": f"Server responded with {response.status_code}"}), 400  
-    except Exception as e:  
-        return jsonify({"uid": uid, "error": f"Internal error: {str(e)}"}), 500
+        if response.status_code == 200:
+            example_msg = output_pb2.Garena_420()
+            try:
+                example_msg.ParseFromString(response.content)
+                response_dict = parse_response(str(example_msg))
+                return jsonify({
+                    "uid": uid,
+                    "status": response_dict.get("status", "N/A"),
+                    "token": response_dict.get("token", "N/A")
+                })
+            except Exception as e:
+                return jsonify({
+                    "uid": uid,
+                    "error": f"Failed to deserialize the response: {str(e)}"
+                }), 400
+        else:
+            return jsonify({
+                "uid": uid,
+                "error": f"Failed to get response: HTTP {response.status_code}, {response.reason}"
+            }), 400
+    except Exception as e:
+        return jsonify({
+            "uid": uid,
+            "error": f"Internal error occurred: {str(e)}"
+        }), 500
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=5000)
