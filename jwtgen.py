@@ -1,22 +1,18 @@
 from flask import Flask, jsonify, request
 from flask_caching import Cache
 import requests
-from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad
-import binascii
-import my_pb2
-import output_pb2
 import json
 from colorama import init
 import warnings
 from urllib3.exceptions import InsecureRequestWarning
 
+# Import the working MajorLogin functions from new code
+from Utilities.until import encode_protobuf, decode_protobuf
+import Proto.compiled.MajorLogin_pb2
+from Configuration.APIConfiguration import RELEASEVERSION  # or set directly e.g., "OB52"
+
 # Disable SSL warning
 warnings.filterwarnings("ignore", category=InsecureRequestWarning)
-
-# Constants
-AES_KEY = b'Yg&tc%DEuh6%Zc^8'
-AES_IV = b'6oyZDr22E3ychjM%'
 
 # Init colorama
 init(autoreset=True)
@@ -26,9 +22,9 @@ app = Flask(__name__)
 cache = Cache(app, config={'CACHE_TYPE': 'SimpleCache', 'CACHE_DEFAULT_TIMEOUT': 25200})
 
 def get_token(password, uid):
+    """Same as before – this part works fine"""
     try:
         url = "https://ffmconnect.live.gop.garenanow.com/oauth/guest/token/grant"
-        # Updated headers (from new code)
         headers = {
             "User-Agent": "GarenaMSDK/4.0.19P9(A063 ;Android 13;en;IN;)",
             "Connection": "Keep-Alive",
@@ -48,24 +44,9 @@ def get_token(password, uid):
         token_json = res.json()
         if "access_token" in token_json and "open_id" in token_json:
             return token_json
-        else:
-            return None
+        return None
     except Exception:
         return None
-
-def encrypt_message(key, iv, plaintext):
-    cipher = AES.new(key, AES.MODE_CBC, iv)
-    padded_message = pad(plaintext, AES.block_size)
-    return cipher.encrypt(padded_message)
-
-def parse_response(content):
-    response_dict = {}
-    lines = content.split("\n")
-    for line in lines:
-        if ":" in line:
-            key, value = line.split(":", 1)
-            response_dict[key.strip()] = value.strip().strip('"')
-    return response_dict
 
 @app.route('/token', methods=['GET'])
 @cache.cached(timeout=25200, query_string=True)
@@ -85,53 +66,40 @@ def get_single_response():
             "credit": "@rahulexez"
         }), 400
 
-    # Build minimal protobuf (only essential fields – matches new code's approach)
-    game_data = my_pb2.GameData()
-    # Keep only the fields that the server actually needs
-    game_data.open_id = token_data['open_id']
-    game_data.access_token = token_data['access_token']
-    game_data.platform_type = 4
-    # The rest are optional – comment them out to avoid validation errors
-    # game_data.timestamp = "2025-05-22 10:10:10"
-    # game_data.game_name = "free fire"
-    # ... (all other fields omitted)
-
+    # ----- Use the NEW code's MajorLogin logic -----
     try:
-        serialized_data = game_data.SerializeToString()
-        encrypted_data = encrypt_message(AES_KEY, AES_IV, serialized_data)
-        edata = binascii.hexlify(encrypted_data).decode()
+        # Create encrypted payload using the working protobuf (only 3 fields)
+        encrypted_payload = encode_protobuf({
+            "openid": token_data['open_id'],
+            "logintoken": token_data['access_token'],
+            "platform": "4",
+        }, Proto.compiled.MajorLogin_pb2.request())   # note: request() returns a protobuf message instance
 
-        # ***** UPDATED URL AND HEADERS (from new working code) *****
-        url = "https://loginbp.ggpolarbear.com/MajorLogin"   # changed endpoint
+        url = "https://loginbp.ggpolarbear.com/MajorLogin"
         headers = {
             'User-Agent': "Dalvik/2.1.0 (Linux; U; Android 13; A063 Build/TKQ1.221220.001)",
             'Connection': "Keep-Alive",
             'Accept-Encoding': "gzip",
             'Content-Type': "application/octet-stream",
             'Expect': "100-continue",
-            'Authorization': "Bearer",                        # added
+            'Authorization': "Bearer",
             'X-Unity-Version': "2018.4.11f1",
             'X-GA': "v1 1",
-            'ReleaseVersion': "OB52"                          # updated from OB50
+            'ReleaseVersion': RELEASEVERSION,   # e.g., "OB52"
         }
 
-        response = requests.post(url, data=bytes.fromhex(edata), headers=headers, verify=False)
+        response = requests.post(url, data=encrypted_payload, headers=headers, verify=False)
 
         if response.status_code == 200:
-            example_msg = output_pb2.Garena_420()
-            try:
-                example_msg.ParseFromString(response.content)
-                response_dict = parse_response(str(example_msg))
-                return jsonify({
-                    "uid": uid,
-                    "status": response_dict.get("status", "N/A"),
-                    "token": response_dict.get("token", "N/A")
-                })
-            except Exception as e:
-                return jsonify({
-                    "uid": uid,
-                    "error": f"Failed to deserialize the response: {str(e)}"
-                }), 400
+            # Decode response using new code's decoder
+            message = decode_protobuf(response.content, Proto.compiled.MajorLogin_pb2.response())
+            # Convert message to a dict (assuming message has 'status' and 'token' fields)
+            # You may need to adapt this based on actual response structure
+            return jsonify({
+                "uid": uid,
+                "status": getattr(message, 'status', 'N/A'),
+                "token": getattr(message, 'token', 'N/A')
+            })
         else:
             return jsonify({
                 "uid": uid,
@@ -140,7 +108,7 @@ def get_single_response():
     except Exception as e:
         return jsonify({
             "uid": uid,
-            "error": f"Internal error occurred: {str(e)}"
+            "error": f"Internal error: {str(e)}"
         }), 500
 
 if __name__ == '__main__':
